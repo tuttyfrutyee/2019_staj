@@ -3,16 +3,16 @@
         {
             "name": "Linux",
             "includePath": [
-                "/home/tuttyfruty/esp/esp-idf/components/"
+                "${workspaceRoot}/main/**",
+                "${workspaceRoot}/build/include/",
+                "${env:IDF_PATH}/components/**"
             ],
             "browse": {
                 "limitSymbolsToIncludedHeaders": true,
                 "databaseFilename": ""
             },
             "intelliSenseMode": "gcc-x64",
-            "compilerPath": "/usr/bin/gcc",
-            "cStandard": "c11",
-            "cppStandard": "c++14"
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json"
         }
     ],
     "version": 4

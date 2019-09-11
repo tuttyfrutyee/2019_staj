@@ -31,6 +31,7 @@
 #include "esp_bt_main.h"
 #include "esp_gatt_common_api.h"
 #include "esp_log.h"
+#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -43,6 +44,8 @@
 
 //rssi related declarations
 int measureOn = 0;
+int freshRssiDataIsReady = 0;
+int freshRssiData = 0;
 //end
 
 static const char remote_device_name[] = "ESP_GATTS_DEMO";
@@ -272,11 +275,11 @@ static void gattc_profile_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_
     }
     case ESP_GATTC_NOTIFY_EVT:
         if (p_data->notify.is_notify){
-            ESP_LOGI(GATTC_TAG, "ESP_GATTC_NOTIFY_EVT, receive notify value:");
+            //ESP_LOGI(GATTC_TAG, "ESP_GATTC_NOTIFY_EVT, receive notify value:");
         }else{
-            ESP_LOGI(GATTC_TAG, "ESP_GATTC_NOTIFY_EVT, receive indicate value:");
+            //ESP_LOGI(GATTC_TAG, "ESP_GATTC_NOTIFY_EVT, receive indicate value:");
         }
-        esp_log_buffer_hex(GATTC_TAG, p_data->notify.value, p_data->notify.value_len);
+        //esp_log_buffer_hex(GATTC_TAG, p_data->notify.value, p_data->notify.value_len);
         measureOn = p_data->notify.value[0];
         
         break;
@@ -409,7 +412,19 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
                   param->update_conn_params.conn_int,
                   param->update_conn_params.latency,
                   param->update_conn_params.timeout);
+
+         esp_ble_gap_read_rssi(param->update_conn_params.bda);
+
         break;
+
+    case ESP_GAP_BLE_READ_RSSI_COMPLETE_EVT: {
+        freshRssiData = param->read_rssi_cmpl.rssi;
+        freshRssiDataIsReady = 1;
+        vTaskDelay(20 / portTICK_PERIOD_MS);
+        esp_ble_gap_read_rssi(param->read_rssi_cmpl.remote_addr);
+    }
+    break;
+    
     default:
         break;
     }
@@ -447,24 +462,45 @@ static void esp_gattc_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
 
 #define MaxRssiBufferSize 1000
 
-int freshRssiDataIsReady = 0;
-int freshRssiData = 0;
+
 
 static void captureRssiData(){
 
+    bool lightIsOn = false;
+    bool debug1 = false;
+    bool debug2 = true;
+
+    int temp = 0;
+
+    
+
     while(true){
 
+        vTaskDelay(20 / portTICK_PERIOD_MS);
+
         //FOR DEBUG
+
         if(measureOn){
-            printf("measureIsOn\n");
-            vTaskDelay(50 / portTICK_PERIOD_MS);
+            if(!lightIsOn){
+                lightIsOn = !lightIsOn;
+                gpio_set_level(14, 1);
+                printf("\n\n\n\nligh is on \n\n\n\n");
+
+            }
+            
         } 
         else{
-            vTaskDelay(50 / portTICK_PERIOD_MS);
-            printf("\n");
+            if(lightIsOn){
+                lightIsOn = !lightIsOn;
+                gpio_set_level(14, 0);
+            }
+
+            
+
         } 
-                      
-        continue;
+
+        if(debug1)                  
+            continue;
 
         //REAL CODE
 
@@ -475,9 +511,11 @@ static void captureRssiData(){
 
         while(measureOn && (bufferIndex < MaxRssiBufferSize)){
 
+            printf("%d\n",bufferIndex);
+
             if(freshRssiDataIsReady){
 
-                freshRssiDataIsReady = !freshRssiDataIsReady;
+                freshRssiDataIsReady = 0;
                 rssiBuffer[bufferIndex] = freshRssiData;
                 bufferIndex++;
             }
@@ -485,9 +523,23 @@ static void captureRssiData(){
         }   
 
         //print them to uart
-        int lengthOfRssiBufferInChar = MaxRssiBufferSize * 4; //since a char is 8 bit and int is 32 bit, hence mltply 4
+        int lengthOfRssiBufferInChar = bufferIndex * 4; //since a char is 8 bit and int is 32 bit, hence mltply 4
         char * rssiBufferAsChar = rssiBuffer;
+
+        continue;
         
+        printf("\n\n\n\n ******** \n\n\n\n");
+
+
+
+        if(debug2){
+            printf("%c\n",'#');
+            for(int i = 0; i < bufferIndex; i++){
+                printf("%d",rssiBuffer[i]);
+            }
+            printf("\n%c",'$');            
+            continue;
+        }
         printf("%c",'#');
         for(int i = 0; i < lengthOfRssiBufferInChar; i++){
             printf("%c",rssiBufferAsChar[i]);
@@ -498,11 +550,30 @@ static void captureRssiData(){
 
 }
 
+static void prepareLed(){
+
+    gpio_config_t io_conf;
+    //set as output mode
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+    //disable pull-down mode
+    io_conf.pull_down_en = 0;
+    //enable pull-up mode
+    io_conf.pull_up_en = 0;    
+    //interrupt of rising edge
+    io_conf.pin_bit_mask = 1ULL<< 14;
+
+
+    gpio_config(&io_conf);
+
+}
+
 
 void app_main()
 {
+    prepareLed();
 
-     xTaskCreate(captureRssiData, "captureRssiData", 2048 * 16, NULL, 10, NULL);
+    xTaskCreate(captureRssiData, "captureRssiData", 2048 * 16, NULL, 10, NULL);
 
     // Initialize NVS.
     esp_err_t ret = nvs_flash_init();
