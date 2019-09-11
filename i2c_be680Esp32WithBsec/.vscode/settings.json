@@ -1,0 +1,17 @@
+{
+    "files.associations": {
+        "esp_gap_ble_api.h": "c",
+        "esp_gatt_common_api.h": "c",
+        "freertos.h": "c",
+        "chrono": "c",
+        "bsec_integration.h": "c",
+        "bme680.h": "c",
+        "bme680_defs.h": "c",
+        "esp_wifi.h": "c",
+        "esp_system.h": "c",
+        "esp_event.h": "c",
+        "esp_event_loop.h": "c",
+        "nvs_flash.h": "c",
+        "gpio.h": "c"
+    }
+}

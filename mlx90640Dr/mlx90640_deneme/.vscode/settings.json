@@ -1,0 +1,15 @@
+{
+    "files.associations": {
+        "esp_gap_ble_api.h": "c",
+        "esp_gatt_common_api.h": "c",
+        "esp_event_loop.h": "c",
+        "esp_wifi.h": "c",
+        "mlx90640_i2c_driver.h": "c",
+        "stdint.h": "c",
+        "*.ipp": "cpp",
+        "mlx90640_api.h": "c",
+        "esp_log.h": "c",
+        "hash_map": "c",
+        "chrono": "c"
+    }
+}

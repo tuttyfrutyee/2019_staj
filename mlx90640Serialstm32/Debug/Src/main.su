@@ -1,0 +1,5 @@
+main.c:196:6:SystemClock_Config	136	static
+main.c:73:5:main	1744	dynamic,bounded
+main.c:362:5:__io_putchar	16	static
+main.c:370:5:_write	16	static
+main.c:386:6:Error_Handler	0	static

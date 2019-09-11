@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "esp_gap_ble_api.h": "c",
+        "esp_gatt_common_api.h": "c",
+        "esp_gattc_api.h": "c",
+        "esp_gatt_defs.h": "c"
+    }
+}

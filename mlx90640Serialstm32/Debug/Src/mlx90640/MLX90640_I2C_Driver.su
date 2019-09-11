@@ -1,0 +1,2 @@
+MLX90640_I2C_Driver.c:25:5:MLX90640_I2CRead	40	dynamic
+MLX90640_I2C_Driver.c:50:5:MLX90640_I2CWrite	40	static
