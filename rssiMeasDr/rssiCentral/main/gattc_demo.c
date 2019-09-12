@@ -280,7 +280,8 @@ static void gattc_profile_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_
             //ESP_LOGI(GATTC_TAG, "ESP_GATTC_NOTIFY_EVT, receive indicate value:");
         }
         //esp_log_buffer_hex(GATTC_TAG, p_data->notify.value, p_data->notify.value_len);
-        measureOn = p_data->notify.value[0];
+        if(!measureOn)
+            measureOn = p_data->notify.value[0];
         
         break;
     case ESP_GATTC_WRITE_DESCR_EVT:
@@ -420,7 +421,6 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
     case ESP_GAP_BLE_READ_RSSI_COMPLETE_EVT: {
         freshRssiData = param->read_rssi_cmpl.rssi;
         freshRssiDataIsReady = 1;
-        vTaskDelay(20 / portTICK_PERIOD_MS);
         esp_ble_gap_read_rssi(param->read_rssi_cmpl.remote_addr);
     }
     break;
@@ -468,39 +468,13 @@ static void captureRssiData(){
 
     bool lightIsOn = false;
     bool debug1 = false;
-    bool debug2 = true;
+    bool debug2 = false;
 
     int temp = 0;
-
-    
 
     while(true){
 
         vTaskDelay(20 / portTICK_PERIOD_MS);
-
-        //FOR DEBUG
-
-        if(measureOn){
-            if(!lightIsOn){
-                lightIsOn = !lightIsOn;
-                gpio_set_level(14, 1);
-                printf("\n\n\n\nligh is on \n\n\n\n");
-
-            }
-            
-        } 
-        else{
-            if(lightIsOn){
-                lightIsOn = !lightIsOn;
-                gpio_set_level(14, 0);
-            }
-
-            
-
-        } 
-
-        if(debug1)                  
-            continue;
 
         //REAL CODE
 
@@ -509,9 +483,11 @@ static void captureRssiData(){
         int rssiBuffer[MaxRssiBufferSize];
         int bufferIndex = 0;
 
-        while(measureOn && (bufferIndex < MaxRssiBufferSize)){
+        while((bufferIndex < MaxRssiBufferSize)){
 
-            printf("%d\n",bufferIndex);
+            vTaskDelay(12 / portTICK_PERIOD_MS);
+
+            //printf("%d\n",bufferIndex);
 
             if(freshRssiDataIsReady){
 
@@ -522,32 +498,79 @@ static void captureRssiData(){
             
         }   
 
+        
+
         //print them to uart
         int lengthOfRssiBufferInChar = bufferIndex * 4; //since a char is 8 bit and int is 32 bit, hence mltply 4
         char * rssiBufferAsChar = rssiBuffer;
 
-        continue;
-        
-        printf("\n\n\n\n ******** \n\n\n\n");
-
-
 
         if(debug2){
+             
+            printf("\n\n\n\n ******** \n\n\n\n");
             printf("%c\n",'#');
             for(int i = 0; i < bufferIndex; i++){
                 printf("%d",rssiBuffer[i]);
             }
             printf("\n%c",'$');            
-            continue;
+    
+        }else{
+            printf("%c %d:",'#',bufferIndex);
+
+            for(int i = 0; i < lengthOfRssiBufferInChar; i++){
+                printf("%c",rssiBufferAsChar[i]);
+            }
+            printf("\n");
         }
-        printf("%c",'#');
-        for(int i = 0; i < lengthOfRssiBufferInChar; i++){
-            printf("%c",rssiBufferAsChar[i]);
-        }
-        printf("%c",'$');
+
+        measureOn = 0;
+
+
     }
 
 
+}
+
+static void watchMeasureOn(void* args){
+
+    int previousMeasureOn = measureOn;
+
+    uint8_t measureIsOn[] = {1};
+    uint8_t measureIsOff[] = {0};
+
+    while(1){
+        if(measureOn && (measureOn != previousMeasureOn)){
+
+            printf("write char measure on\n");
+
+            
+            esp_ble_gattc_write_char( gl_profile_tab[PROFILE_A_APP_ID].gattc_if,
+                                  gl_profile_tab[PROFILE_A_APP_ID].conn_id,
+                                  gl_profile_tab[PROFILE_A_APP_ID].char_handle,
+                                  sizeof(measureIsOn),
+                                  measureIsOn,
+                                  ESP_GATT_WRITE_TYPE_NO_RSP,
+                                  ESP_GATT_AUTH_REQ_NONE);
+
+        }else if(!measureOn && (measureOn != previousMeasureOn)){
+
+            printf("write char measure off\n");
+
+            esp_ble_gattc_write_char( gl_profile_tab[PROFILE_A_APP_ID].gattc_if,
+                        gl_profile_tab[PROFILE_A_APP_ID].conn_id,
+                        gl_profile_tab[PROFILE_A_APP_ID].char_handle,
+                        sizeof(measureIsOff),
+                        measureIsOff,
+                        ESP_GATT_WRITE_TYPE_NO_RSP,
+                        ESP_GATT_AUTH_REQ_NONE);
+
+        }
+
+        previousMeasureOn = measureOn;
+
+        vTaskDelay(20 / portTICK_PERIOD_MS);
+
+    }
 }
 
 static void prepareLed(){
@@ -574,6 +597,8 @@ void app_main()
     prepareLed();
 
     xTaskCreate(captureRssiData, "captureRssiData", 2048 * 16, NULL, 10, NULL);
+
+    xTaskCreate(watchMeasureOn, "watchMeasureOn", 2048 * 4, NULL, 10, NULL);
 
     // Initialize NVS.
     esp_err_t ret = nvs_flash_init();

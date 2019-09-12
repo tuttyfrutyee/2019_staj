@@ -59,6 +59,10 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
 
 #define PREPARE_BUF_MAX_SIZE 1024
 
+//for measurement handling stuff
+int measureOn = 0;
+//end
+
 static uint8_t char1_str[] = {0x11,0x22,0x33};
 static esp_gatt_char_prop_t a_property = 0;
 static esp_gatt_char_prop_t b_property = 0;
@@ -393,6 +397,22 @@ static void gatts_profile_a_event_handler(esp_gatts_cb_event_t event, esp_gatt_i
                 }
 
             }
+            else if(param->write.len == 1){
+                uint8_t data = param->write.value[0];
+                if(data == 0){
+                    //measurement is off
+                    printf("measureOn is 0\n");
+                    measureOn = 0;
+                }else
+                {
+                    //measurement is on
+                    printf("measureOn is 1\n");
+                    measureOn = 1;
+                }
+                
+            }else{
+                printf("none of them\n");
+            }
         }
         example_write_event_env(gatts_if, &a_prepare_write_env, param);
         break;
@@ -540,8 +560,9 @@ uint32_t getTime(){
 }
 
 uint32_t lastButtonClickTime = 0;
-int buttonClickParity = 0;
-int measureOn = 0;
+
+int buttonClick = 0;
+
 
 
 
@@ -549,11 +570,8 @@ static void IRAM_ATTR gpio_isr_handler(void* arg)
 {
     uint32_t currentTime = getTime();
     if((currentTime - lastButtonClickTime) > 250){
-        buttonClickParity = !buttonClickParity;
-        if(buttonClickParity == 1)
-            measureOn = 1;
-        else
-            measureOn = 0;        
+        
+        buttonClick = 1;
         
         lastButtonClickTime = currentTime;
     }
@@ -561,19 +579,18 @@ static void IRAM_ATTR gpio_isr_handler(void* arg)
 
 static void buttonNotifier(void* arg){
     
-    int previousMeasureMode = measureOn;
     uint8_t notify_data[1] = {0};
 
     while(1){
 
-        if(previousMeasureMode != measureOn){
+        if(buttonClick){
 
-            notify_data[0] = measureOn;
+            buttonClick = 0;
+
+            notify_data[0] = 1;
 
             esp_ble_gatts_send_indicate(gl_profile_tab[PROFILE_A_APP_ID].gatts_if, gl_profile_tab[PROFILE_A_APP_ID].conn_id, gl_profile_tab[PROFILE_A_APP_ID].char_handle,
                                                 sizeof(notify_data), notify_data, false);
-
-            previousMeasureMode = measureOn;
 
         }else{
             vTaskDelay(10 / portTICK_PERIOD_MS);
@@ -581,9 +598,23 @@ static void buttonNotifier(void* arg){
     }
 }
 
+static void measurementWatcher(void* arg){
+    while(1){
+
+        if(measureOn){
+            gpio_set_level(5, 1);
+        }else{
+            gpio_set_level(5, 0);
+        }
+
+        vTaskDelay(50 / portTICK_PERIOD_MS);
+    }
+}
 
 
-static void prepareButton(){
+
+static void prepareButtonAndLed(){
+
     gpio_config_t io_conf;
     //set as output mode
     io_conf.mode = GPIO_MODE_INPUT;
@@ -599,6 +630,18 @@ static void prepareButton(){
 
     gpio_config(&io_conf);
 
+    io_conf.mode = GPIO_MODE_OUTPUT;
+    //disable pull-down mode
+    io_conf.pull_down_en = 0;
+    //enable pull-up mode
+    io_conf.pull_up_en = 0;    
+    //interrupt of rising edge
+    io_conf.intr_type = GPIO_PIN_INTR_DISABLE;
+    //bit mask of the pins, use GPIO4/5 here
+    io_conf.pin_bit_mask = 1ULL<< 5;
+
+    gpio_config(&io_conf);
+
 
     //install gpio isr service
     gpio_install_isr_service(0);
@@ -610,9 +653,11 @@ void app_main()
 {
     esp_err_t ret;
 
-    prepareButton();
+    prepareButtonAndLed();
 
     xTaskCreate(buttonNotifier, "buttonNotifier", 2048 * 5, NULL, 10, NULL);
+
+    xTaskCreate(measurementWatcher, "measurementWatcher", 2048 * 2, NULL, 10, NULL);
 
     // Initialize NVS.
     ret = nvs_flash_init();
